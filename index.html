@@ -4014,7 +4014,6 @@ t[0x00] = function() {
         }
       }
 
-     
 class Controller {
   constructor() {
     this.state = 0;
@@ -4024,12 +4023,14 @@ class Controller {
   }
 
   write(val) {
-    const strobe = val & 1;
-    this.strobe = strobe;
-    if (strobe) {
+    this.strobe = val & 1;
+
+    if (this.strobe) {
+      // ストローブが1の間は常にAボタンを返す
       this.latch = this.state;
       this.index = 0;
     } else {
+      // 1→0に変化した瞬間だけ index をリセット
       this.latch = this.state;
       this.index = 0;
     }
@@ -4037,14 +4038,20 @@ class Controller {
 
   read() {
     let ret = 0;
-    if (this.index < 8) {
-      ret = (this.latch >> this.index) & 1;
+
+    if (this.strobe) {
+      // ストローブが1の間は常にAボタン
+      ret = this.state & 1;
     } else {
-      ret = 1;
-    }
-    if (!this.strobe && this.index < 8) {
+      // ストローブが0のときはシフト読み取り
+      if (this.index < 8) {
+        ret = (this.latch >> this.index) & 1;
+      } else {
+        ret = 1;
+      }
       this.index++;
     }
+
     return ret;
   }
 
@@ -4061,6 +4068,7 @@ class Controller {
     this.state = s;
   }
 }
+
 // 押しっぱなし対応（マウス・タッチ両方
      
 class Bus {
@@ -4119,7 +4127,8 @@ this.cartridge = null;
     if (addr < 0x4000) return this.ppu.cpuRead(0x2000 + (addr & 7));
  if (addr >= 0x4000 && addr <= 0x4015) return this.apu.read(addr);
     if (addr === 0x4016) return this.ctrl1.read();
-    if (addr === 0x4017) return this.apu.read(addr); // ←超重要;
+    if (addr === 0x4017) return this.ctrl2.read();
+
      if (this.mapper) {
     if (addr >= 0x6000 && addr < 0x8000) return this.mapper.cpuRead(addr);
     if (addr >= 0x8000) return this.mapper.cpuRead(addr);
