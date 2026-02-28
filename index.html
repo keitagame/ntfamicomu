@@ -253,7 +253,12 @@ class Mapper0 extends IMapper {
   cpuRead(addr) {
     if (addr < 0x8000) return 0;
     let a = addr - 0x8000;
-    if (this.prgSize === 0x4000) a &= 0x3FFF;
+    // prgSize はバイト数なので、16KB の場合だけミラー
+if (this.prgSize === 0x4000) {
+    a &= 0x3FFF;
+}
+
+  
     return this.prg[a];
   }
 
@@ -2196,6 +2201,7 @@ class PPURegisters {
     this.PPUMASK = 0;
     this.PPUSTATUS = 0xa0;
     this.OAMADDR = 0;
+    this.nmiWanted = false;
 
     // スクロール関連レジスタ
     this.v = 0;      // 現在のVRAMアドレス (15ビット)
@@ -2556,20 +2562,12 @@ class PPUTiming {
   }
 
   step(reg, bus) {
-   
-    if (this.scanline === 241 && this.cycle === 1) {
-    reg.setVBlank(true);
-        if (reg.PPUCTRL & 0x80) bus.requestNMI();
-  }
-
- 
-
-  if (this.scanline === 261 && this.cycle === 1) {
-    reg.setVBlank(false);
-    reg.PPUSTATUS &= ~0x40;
-    reg.PPUSTATUS &= ~0x20;
-  }
-
+   const prev = reg.nmiWanted; // VBlank 開始 
+   if (this.scanline === 241 && this.cycle === 1) { reg.setVBlank(true); } // VBlank 終了 
+   if (this.scanline === 261 && this.cycle === 1) { reg.setVBlank(false); 
+    reg.PPUSTATUS &= ~0x40; reg.PPUSTATUS &= ~0x20; } // NMI が必要かどうか（レベル） 
+    const nmiWanted = (reg.PPUSTATUS & 0x80) && (reg.PPUCTRL & 0x80); // エッジ検出（0→1 の瞬間だけ NMI） 
+    if (!prev && nmiWanted) { bus.requestNMI(); } reg.nmiWanted = nmiWanted;
   // ---- advance cycle ----
   this.cycle++;
 
@@ -4933,6 +4931,7 @@ document.getElementById("fdsDisk").addEventListener("change", e => {
           nes.loadCartridge(romBytes);
 
           nes.stepFrame();
+          
 
           loop();
 
